@@ -88,7 +88,7 @@ func (h *HTTP) handleAdmin(w http.ResponseWriter, r *http.Request) {
 
 func (h *HTTP) handleCounters(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
-        defer h.mu.Unlock()
-        relayctx.SetBackendTime(r)
+	defer h.mu.Unlock()
+	relayctx.SetBackendTime(r)
 	relayctx.JsonResponse(w, r, 200, h.counters)
 }

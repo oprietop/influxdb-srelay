@@ -25,14 +25,13 @@ type aggregation struct {
 	BkDurationMs time.Duration `json:"bk_duration_ms"`
 	Duration     time.Duration `json:"duration"`
 	Latency      time.Duration `json:"latency"`
-	ReturnSize   int	   `json:"returnsize"`
-	WritePoints  int	   `json:"writepoints"`
-	WriteSize    int	   `json:"writesize"`
-	StatusOk     int	   `json:"statusok"`
-	StatusNok    int	   `json:"statusnok"`
-	Count	     int	   `json:"count"`
+	ReturnSize   int           `json:"returnsize"`
+	WritePoints  int           `json:"writepoints"`
+	WriteSize    int           `json:"writesize"`
+	StatusOk     int           `json:"statusok"`
+	StatusNok    int           `json:"statusnok"`
+	Count        int           `json:"count"`
 }
-
 
 // HTTP is a relay for HTTP influxdb writes
 type HTTP struct {
@@ -57,9 +56,9 @@ type HTTP struct {
 	rateLimiter *rate.Limiter
 
 	// counters
-	ticker	  *time.Ticker
-	mu	  sync.Mutex
-	counters  map[string]*aggregation
+	ticker   *time.Ticker
+	mu       sync.Mutex
+	counters map[string]*aggregation
 }
 
 type relayHandlerFunc func(h *HTTP, w http.ResponseWriter, r *http.Request)
@@ -67,12 +66,12 @@ type relayMiddleware func(h *HTTP, handlerFunc relayHandlerFunc) relayHandlerFun
 
 var (
 	handlers = map[string]relayHandlerFunc{
-		"/ping":	(*HTTP).handlePing,
-		"/status":	(*HTTP).handleStatus,
-		"/admin":	(*HTTP).handleAdmin,
+		"/ping":        (*HTTP).handlePing,
+		"/status":      (*HTTP).handleStatus,
+		"/admin":       (*HTTP).handleAdmin,
 		"/admin/flush": (*HTTP).handleFlush,
-		"/health":	(*HTTP).handleHealth,
-		"/counters":	(*HTTP).handleCounters,
+		"/health":      (*HTTP).handleHealth,
+		"/counters":    (*HTTP).handleCounters,
 	}
 
 	middlewares = []relayMiddleware{

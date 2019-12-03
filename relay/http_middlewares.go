@@ -87,23 +87,23 @@ func (h *HTTP) logMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 		if rc.Served {
 			// populape the loginfo struct
 			l := loginfo{
-				traceroute: rc.TraceRoute.String(),
-				referer: r.Referer(),
-				url: r.URL.String(),
-				writesize: rc.RequestSize,
-				writepoints: rc.RequestPoints,
-				returnsize: rc.SentDataLength,
-				duration_ms: time.Since(rc.InputTime),
+				traceroute:     rc.TraceRoute.String(),
+				referer:        r.Referer(),
+				url:            r.URL.String(),
+				writesize:      rc.RequestSize,
+				writepoints:    rc.RequestPoints,
+				returnsize:     rc.SentDataLength,
+				duration_ms:    time.Since(rc.InputTime),
 				bk_duration_ms: time.Since(rc.BackendTime),
-				latency_ms: rc.BackendTime.Sub(rc.InputTime),
-				status: rc.SentHTTPStatus,
-				method: r.Method,
-				user: utils.GetUserFromRequest(r),
-				source: r.RemoteAddr,
-				xff: r.Header.Get("X-Forwarded-For"),
-				useragent: r.UserAgent(),
+				latency_ms:     rc.BackendTime.Sub(rc.InputTime),
+				status:         rc.SentHTTPStatus,
+				method:         r.Method,
+				user:           utils.GetUserFromRequest(r),
+				source:         r.RemoteAddr,
+				xff:            r.Header.Get("X-Forwarded-For"),
+				useragent:      r.UserAgent(),
 			}
-                        // Send an access log entry
+			// Send an access log entry
 			h.acclog.Info().
 				Str("trace-route", l.traceroute).
 				Str("referer", l.referer).
@@ -121,7 +121,7 @@ func (h *HTTP) logMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 				Str("xff", l.xff).
 				Str("user-agent", l.useragent).
 				Msg("")
-		        // Increment our metrics counters
+				// Increment our metrics counters
 			h.addCounters(l)
 		}
 		h.log.Debug().Msg("----------------------END logMiddleWare------------------------")
