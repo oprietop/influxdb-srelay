@@ -1,8 +1,9 @@
 package relay
 
 import (
-	"github.com/influxdata/influxdb1-client/v2"
 	"time"
+	"runtime"
+	"github.com/influxdata/influxdb1-client/v2"
 )
 
 // increment the relay counters
@@ -36,9 +37,22 @@ func (h *HTTP) addCounters(l loginfo) {
 }
 
 // reaturn the average counters as BatchPoints
+func (h *HTTP) createPoint(m string, tags map[string]string, fields map[string]interface{}, ts time.Time) *client.Point {
+	point, err := client.NewPoint(
+		m,
+		tags,
+		fields,
+		ts,
+	)
+	if err != nil {
+		h.log.Error().Msgf("Error creating a influxdb point: ", err)
+	}
+
+	return point
+}
+
+// reaturn the average counters as BatchPoints
 func (h *HTTP) getPoints() client.BatchPoints {
-	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	var T time.Time
 
@@ -50,10 +64,36 @@ func (h *HTTP) getPoints() client.BatchPoints {
 		h.log.Error().Msgf("Error creating the BatchPoints struct: ", err)
 	}
 
+	// Runtine Counters
+	// Grab a snap of the mememory stats
+        var m runtime.MemStats
+        runtime.ReadMemStats(&m)
+	tags := map[string]string{
+		"Name": h.cfg.Name,
+		"GOVersion": runtime.Version(),
+	}
+	fields := map[string]interface{}{
+		"NumCPU":       int64(runtime.NumCPU()),
+		"NumGoroutine": int64(runtime.NumGoroutine()),
+		"NumGC":        int64(m.NumGC),
+		"TotalAlloc":   int64(m.TotalAlloc),
+		"Alloc":        int64(m.Alloc),
+		"Sys":          int64(m.Sys),
+	}
+	// create and add a point
+	point := h.createPoint("runtime", tags, fields, T)
+	bp.AddPoint(point)
+
+	// Relay counters
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	// traverse the counters
 	for k, _ := range h.counters {
 		c := h.counters[k].Count
-		tags := map[string]string{"url": k}
+		tags := map[string]string{
+			"Url": k,
+			"Name": h.cfg.Name,
+		}
 		fields := map[string]interface{}{
 			"AvgBkDuration":  h.counters[k].BkDurationMs.Microseconds() / int64(c),
 			"AvgDuration":    h.counters[k].Duration.Microseconds() / int64(c),
@@ -65,21 +105,13 @@ func (h *HTTP) getPoints() client.BatchPoints {
 			"StatusOk":       h.counters[k].StatusOk,
 			"Count":          h.counters[k].Count,
 		}
-		// create a point
-		point, err := client.NewPoint(
-			"counters",
-			tags,
-			fields,
-			T,
-		)
-		if err != nil {
-			h.log.Error().Msgf("Error creating a influxdb point: ", err)
-		}
-		// append the points
+		// create and add a point
+		point := h.createPoint("counters", tags, fields, T)
 		bp.AddPoint(point)
 		// clean the counters for that key
 		delete(h.counters, k)
 	}
+
 	h.log.Debug().Msgf("Got %v influxdb points.", len(bp.Points()))
 
 	return bp
