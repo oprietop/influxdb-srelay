@@ -36,7 +36,7 @@ func (h *HTTP) addCounters(l loginfo) {
 	h.log.Debug().Msgf("Got %v urls in the counters map.", len(h.counters))
 }
 
-// retuan a point
+// return a point
 func (h *HTTP) createPoint(m string, tags map[string]string, fields map[string]interface{}, ts time.Time) *client.Point {
 	point, err := client.NewPoint(
 		m,
@@ -51,7 +51,7 @@ func (h *HTTP) createPoint(m string, tags map[string]string, fields map[string]i
 	return point
 }
 
-// gather return the counters as BatchPoints
+// gather and return the counters as BatchPoints
 func (h *HTTP) getPoints() client.BatchPoints {
 
 	var T time.Time
