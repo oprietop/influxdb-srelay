@@ -11,6 +11,25 @@ import (
 	"github.com/toni-moreno/influxdb-srelay/utils"
 )
 
+// Struct to hold the logging items
+type loginfo struct {
+	traceroute     string
+	referer        string
+	url            string
+	writesize      int
+	writepoints    int
+	returnsize     int
+	duration_ms    time.Duration
+	bk_duration_ms time.Duration
+	latency_ms     time.Duration
+	status         int
+	method         string
+	user           string
+	source         string
+	xff            string
+	useragent      string
+}
+
 func allMiddlewares(h *HTTP, handlerFunc relayHandlerFunc) relayHandlerFunc {
 	var res = handlerFunc
 	for _, middleware := range middlewares {
@@ -66,24 +85,45 @@ func (h *HTTP) logMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 		next(h, w, r)
 		rc := relayctx.GetRelayContext(r)
 		if rc.Served {
+			// populape the loginfo struct
+			l := loginfo{
+				traceroute: rc.TraceRoute.String(),
+				referer: r.Referer(),
+				url: r.URL.String(),
+				writesize: rc.RequestSize,
+				writepoints: rc.RequestPoints,
+				returnsize: rc.SentDataLength,
+				duration_ms: time.Since(rc.InputTime),
+				bk_duration_ms: time.Since(rc.BackendTime),
+				latency_ms: rc.BackendTime.Sub(rc.InputTime),
+				status: rc.SentHTTPStatus,
+				method: r.Method,
+				user: utils.GetUserFromRequest(r),
+				source: r.RemoteAddr,
+				xff: r.Header.Get("X-Forwarded-For"),
+				useragent: r.UserAgent(),
+			}
+                        // Send an access log entry
 			h.acclog.Info().
-				Str("trace-route", rc.TraceRoute.String()).
-				Str("referer", r.Referer()).
-				Str("url", r.URL.String()).
-				Int("write-size", rc.RequestSize).
-				Int("write-points", rc.RequestPoints).
-				Int("returnsize", rc.SentDataLength).
-				Dur("duration_ms", time.Since(rc.InputTime)).
-				Dur("bk_duration_ms", time.Since(rc.BackendTime)).
-				Dur("latency_ms", rc.BackendTime.Sub(rc.InputTime)).
-				Int("status", rc.SentHTTPStatus).
-				Str("method", r.Method).
-				Str("user", utils.GetUserFromRequest(r)). // <---allready computed from http_params !! REVIEW!!!
-				Str("source", r.RemoteAddr).
-				Str("user-agent", r.UserAgent()).
+				Str("trace-route", l.traceroute).
+				Str("referer", l.referer).
+				Str("url", l.url).
+				Int("write-size", l.writesize).
+				Int("write-points", l.writepoints).
+				Int("returnsize", l.returnsize).
+				Dur("duration_ms", l.duration_ms).
+				Dur("bk_duration_ms", l.bk_duration_ms).
+				Dur("latency_ms", l.latency_ms).
+				Int("status", l.status).
+				Str("method", l.method).
+				Str("user", l.user). // <---allready computed from http_params !! REVIEW!!!
+				Str("source", l.source).
+				Str("xff", l.xff).
+				Str("user-agent", l.useragent).
 				Msg("")
+		        // Increment our metrics counters
+			h.addCounters(l)
 		}
-
 		h.log.Debug().Msg("----------------------END logMiddleWare------------------------")
 	})
 }

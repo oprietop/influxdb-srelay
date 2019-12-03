@@ -16,7 +16,23 @@ import (
 	"github.com/toni-moreno/influxdb-srelay/config"
 	"github.com/toni-moreno/influxdb-srelay/relayctx"
 	"github.com/toni-moreno/influxdb-srelay/utils"
+
+	"sync"
 )
+
+// Structure to hold our counters
+type aggregation struct {
+	BkDurationMs time.Duration `json:"bk_duration_ms"`
+	Duration     time.Duration `json:"duration"`
+	Latency      time.Duration `json:"latency"`
+	ReturnSize   int	   `json:"returnsize"`
+	WritePoints  int	   `json:"writepoints"`
+	WriteSize    int	   `json:"writesize"`
+	StatusOk     int	   `json:"statusok"`
+	StatusNok    int	   `json:"statusnok"`
+	Count	     int	   `json:"count"`
+}
+
 
 // HTTP is a relay for HTTP influxdb writes
 type HTTP struct {
@@ -39,6 +55,11 @@ type HTTP struct {
 	acclog *zerolog.Logger
 
 	rateLimiter *rate.Limiter
+
+	// counters
+	ticker	  *time.Ticker
+	mu	  sync.Mutex
+	counters  map[string]*aggregation
 }
 
 type relayHandlerFunc func(h *HTTP, w http.ResponseWriter, r *http.Request)
@@ -46,11 +67,12 @@ type relayMiddleware func(h *HTTP, handlerFunc relayHandlerFunc) relayHandlerFun
 
 var (
 	handlers = map[string]relayHandlerFunc{
-		"/ping":        (*HTTP).handlePing,
-		"/status":      (*HTTP).handleStatus,
-		"/admin":       (*HTTP).handleAdmin,
+		"/ping":	(*HTTP).handlePing,
+		"/status":	(*HTTP).handleStatus,
+		"/admin":	(*HTTP).handleAdmin,
 		"/admin/flush": (*HTTP).handleFlush,
-		"/health":      (*HTTP).handleHealth,
+		"/health":	(*HTTP).handleHealth,
+		"/counters":	(*HTTP).handleCounters,
 	}
 
 	middlewares = []relayMiddleware{
@@ -68,12 +90,26 @@ func NewHTTP(cfg *config.HTTPConfig) (*HTTP, error) {
 	h := &HTTP{}
 	h.cfg = cfg
 	h.closing = make(chan bool, 1)
+
 	//Log output
-
 	h.log = utils.GetConsoleLogFormated(cfg.LogFile, cfg.LogLevel)
-	//AccessLog Output
 
+	//AccessLog Output
 	h.acclog = utils.GetConsoleLogFormated(cfg.AccessLog, "debug")
+
+	h.counters = map[string]*aggregation{}
+	if cfg.MetricsInterval > 5 && len(cfg.MetricsHost) > 0 && len(cfg.MetricsDB) > 0 {
+		h.log.Info().Msgf("Sending metrics to influxdb every %v seconds.", cfg.MetricsInterval)
+		h.ticker = time.NewTicker(time.Duration(h.cfg.MetricsInterval) * time.Second)
+		go func() {
+			for now := range h.ticker.C {
+				h.log.Info().Msgf("Tick at %v. Sending counters to influxdb.", now)
+				h.sendCounters()
+			}
+		}()
+	} else {
+		h.log.Info().Msgf("Missing metrics* variables, not sending metrics to influxdb.")
+	}
 
 	h.rp = cfg.DefaultRetentionPolicy
 
@@ -120,6 +156,8 @@ func (h *HTTP) Release() {
 	h.Endpoints = nil
 	h.log = nil
 	h.acclog = nil
+	h.counters = nil
+	h.ticker.Stop()
 	h.rateLimiter = nil
 	h.cfg = nil
 	h.s = nil

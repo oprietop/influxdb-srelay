@@ -358,6 +358,12 @@ type HTTPConfig struct {
 	TLSKey  string `toml:"tls_key"`
 	// Default retention policy to set for forwarded requests
 	DefaultRetentionPolicy string `toml:"default-retention-policy"`
+	// InfluxDB metrics backend
+	MetricsHost     string `toml:"metrics-host"`
+	MetricsDB       string `toml:"metrics-db"`
+	MetricsUser     string `toml:"metrics-user"`
+	MetricsPass     string `toml:"metrict-pass"`
+	MetricsInterval int    `toml:"metrics-interval"`
 }
 
 func (h *HTTPConfig) ValidateCfg(cfg *Config) error {

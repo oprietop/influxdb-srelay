@@ -85,3 +85,10 @@ func (h *HTTP) handleAdmin(w http.ResponseWriter, r *http.Request) {
 	relayctx.JsonResponse(w, r, 400, fmt.Sprintf("cluster %s not exist in  config", clusterid))
 	h.log.Error().Msgf("Handle Admin for cluster Error cluster %s not exist", clusterid)
 }
+
+func (h *HTTP) handleCounters(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+        defer h.mu.Unlock()
+        relayctx.SetBackendTime(r)
+	relayctx.JsonResponse(w, r, 200, h.counters)
+}
