@@ -13,7 +13,7 @@ func (h *HTTP) addCounters(l loginfo) {
 	defer h.mu.Unlock()
 
 	// Create initialize the map value for each missing key
-	u := l.url
+	u := l.traceroute
 	if _, found := h.counters[u]; !found {
 		h.counters[u] = &aggregation{}
 	}
@@ -69,7 +69,7 @@ func (h *HTTP) getPoints() client.BatchPoints {
         var m runtime.MemStats
         runtime.ReadMemStats(&m)
 	tags := map[string]string{
-		"Name": h.cfg.Name,
+		"Traceroute": h.cfg.Name,
 		"GOVersion": runtime.Version(),
 	}
 	fields := map[string]interface{}{
@@ -91,7 +91,7 @@ func (h *HTTP) getPoints() client.BatchPoints {
 	for k, _ := range h.counters {
 		c := h.counters[k].Count
 		tags := map[string]string{
-			"Url": k,
+			"Path": k,
 			"Name": h.cfg.Name,
 		}
 		fields := map[string]interface{}{

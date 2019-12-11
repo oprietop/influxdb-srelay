@@ -85,6 +85,7 @@ func (h *HTTP) logMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 		next(h, w, r)
 		rc := relayctx.GetRelayContext(r)
 		if rc.Served {
+			//h.log.Debug().Msgf("%+v\n", rc)
 			// populape the loginfo struct
 			l := loginfo{
 				traceroute:     rc.TraceRoute.String(),

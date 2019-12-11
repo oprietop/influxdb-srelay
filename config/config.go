@@ -362,7 +362,7 @@ type HTTPConfig struct {
 	MetricsHost     string `toml:"metrics-host"`
 	MetricsDB       string `toml:"metrics-db"`
 	MetricsUser     string `toml:"metrics-user"`
-	MetricsPass     string `toml:"metrict-pass"`
+	MetricsPass     string `toml:"metrics-pass"`
 	MetricsInterval int    `toml:"metrics-interval"`
 }
 
