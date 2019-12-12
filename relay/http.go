@@ -239,6 +239,7 @@ func (h *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//if not served we will process the amdin EndPoints
 	served := relayctx.GetServed(R)
 	if !served {
+		relayctx.AppendCxtTracePath(R, "endpoint", "none")
 		h.log.Debug().Msg("Query not served by user endpoints, reviewing relay handlers ")
 		for url, fun := range handlers {
 			if strings.HasPrefix(r.URL.Path, url) {

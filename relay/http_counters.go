@@ -1,36 +1,36 @@
 package relay
 
 import (
-	"time"
+	"github.com/influxdata/influxdb1-client/v2"
 	"runtime"
 	"strings"
-	"github.com/influxdata/influxdb1-client/v2"
+	"time"
 )
 
 // increment the relay counters
-func (h *HTTP) addCounters(l loginfo) {
+func (h *HTTP) addCounters(l *loginfo) {
 	// using a mutex, have to consider channels or sync.map
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Create initialize the map value for each missing key
-	u := "endpoint:" + l.endpoint + "> " + l.traceroute
-	if _, found := h.counters[u]; !found {
-		h.counters[u] = &aggregation{}
+	// Initialize the map value for each missing key
+	k := l.traceroute
+	if _, found := h.counters[k]; !found {
+		h.counters[k] = &aggregation{}
 	}
 
 	// Increment the counters
-	h.counters[u].Count += 1
-	h.counters[u].BkDurationMs += l.bk_duration_ms
-	h.counters[u].Duration += l.duration_ms
-	h.counters[u].Latency += l.latency_ms
-	h.counters[u].ReturnSize += l.returnsize
-	h.counters[u].WritePoints += l.writepoints
-	h.counters[u].WriteSize += l.writesize
+	h.counters[k].Count += 1
+	h.counters[k].BkDurationMs += l.bk_duration_ms
+	h.counters[k].Duration += l.duration_ms
+	h.counters[k].Latency += l.latency_ms
+	h.counters[k].ReturnSize += l.returnsize
+	h.counters[k].WritePoints += l.writepoints
+	h.counters[k].WriteSize += l.writesize
 	if l.status > 299 && l.status < 200 {
-		h.counters[u].StatusNok += 1
+		h.counters[k].StatusNok += 1
 	} else {
-		h.counters[u].StatusOk += 1
+		h.counters[k].StatusOk += 1
 	}
 
 	// debug
@@ -67,10 +67,10 @@ func (h *HTTP) getPoints() client.BatchPoints {
 
 	// Runtine Counters
 	// Grab a snap of the mememory stats
-        var m runtime.MemStats
-        runtime.ReadMemStats(&m)
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
 	tags := map[string]string{
-		"Name": h.cfg.Name,
+		"Name":      h.cfg.Name,
 		"GOVersion": runtime.Version(),
 	}
 	fields := map[string]interface{}{
@@ -92,16 +92,16 @@ func (h *HTTP) getPoints() client.BatchPoints {
 	for k, _ := range h.counters {
 		c := h.counters[k].Count
 		tags := map[string]string{
-			"Path": k,
 			"Name": h.cfg.Name,
 		}
-                items := strings.Split(k, "> ")
-	        for _, i := range items {
-	                pair := strings.Split(i, ":")
-		        if len(pair) == 2 {
-		                tags[pair[0]] = pair[1]
-                        }
-	        }
+		// Split the traceroute into tags
+		items := strings.Split(k, "> ")
+		for _, i := range items {
+			pair := strings.Split(i, ":")
+			if len(pair) == 2 {
+				tags[pair[0]] = pair[1]
+			}
+		}
 		fields := map[string]interface{}{
 			"AvgBkDuration":  h.counters[k].BkDurationMs.Microseconds() / int64(c),
 			"AvgDuration":    h.counters[k].Duration.Microseconds() / int64(c),
@@ -136,6 +136,7 @@ func (h *HTTP) sendCounters() {
 	if err != nil {
 		h.log.Error().Msgf("Error creating the influxdb client: ", err)
 	}
+	defer c.Close()
 
 	// get the points
 	bp := h.getPoints()

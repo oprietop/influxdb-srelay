@@ -117,6 +117,7 @@ func (e *HTTPEndPoint) ProcessInput(w http.ResponseWriter, r *http.Request) bool
 			found = true
 			uri = endpointURI
 			relayctx.SetCtxEndpoint(r, uri)
+			relayctx.AppendCxtTracePath(r, "endpoint", uri)
 		}
 	}
 	if !found {

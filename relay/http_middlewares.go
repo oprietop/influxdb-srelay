@@ -14,7 +14,6 @@ import (
 // Struct to hold the logging items
 type loginfo struct {
 	traceroute     string
-	endpoint       string
 	referer        string
 	url            string
 	writesize      int
@@ -102,7 +101,6 @@ func (h *HTTP) logMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 				user:           utils.GetUserFromRequest(r),
 				source:         r.RemoteAddr,
 				xff:            r.Header.Get("X-Forwarded-For"),
-			        endpoint:       rc.Endpoint,
 				useragent:      r.UserAgent(),
 			}
 			// Send an access log entry
@@ -123,8 +121,8 @@ func (h *HTTP) logMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 				Str("xff", l.xff).
 				Str("user-agent", l.useragent).
 				Msg("")
-				// Increment our metrics counters
-			h.addCounters(l)
+			// Increment our metrics counters
+			h.addCounters(&l)
 		}
 		h.log.Debug().Msg("----------------------END logMiddleWare------------------------")
 	})
