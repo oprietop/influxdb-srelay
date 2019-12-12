@@ -57,7 +57,7 @@ func AppendCxtTracePath(r *http.Request, component string, path string) {
 
 func InitRelayContext(r *http.Request) *http.Request {
 	val := make(map[string]string)
-	rc := &RelayRequestCtx{responses: []*backend.ResponseData{}, in: val}
+	rc := &RelayRequestCtx{responses: []*backend.ResponseData{}, in: val, Endpoint: "none"}
 	rc.InputTime = time.Now()
 	ctx := context.WithValue(r.Context(), "RelayRequestCtx", rc)
 	return r.WithContext(ctx)

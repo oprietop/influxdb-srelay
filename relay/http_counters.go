@@ -3,6 +3,7 @@ package relay
 import (
 	"time"
 	"runtime"
+	"strings"
 	"github.com/influxdata/influxdb1-client/v2"
 )
 
@@ -13,7 +14,7 @@ func (h *HTTP) addCounters(l loginfo) {
 	defer h.mu.Unlock()
 
 	// Create initialize the map value for each missing key
-	u := l.traceroute
+	u := "endpoint:" + l.endpoint + "> " + l.traceroute
 	if _, found := h.counters[u]; !found {
 		h.counters[u] = &aggregation{}
 	}
@@ -69,7 +70,7 @@ func (h *HTTP) getPoints() client.BatchPoints {
         var m runtime.MemStats
         runtime.ReadMemStats(&m)
 	tags := map[string]string{
-		"Traceroute": h.cfg.Name,
+		"Name": h.cfg.Name,
 		"GOVersion": runtime.Version(),
 	}
 	fields := map[string]interface{}{
@@ -94,6 +95,13 @@ func (h *HTTP) getPoints() client.BatchPoints {
 			"Path": k,
 			"Name": h.cfg.Name,
 		}
+                items := strings.Split(k, "> ")
+	        for _, i := range items {
+	                pair := strings.Split(i, ":")
+		        if len(pair) == 2 {
+		                tags[pair[0]] = pair[1]
+                        }
+	        }
 		fields := map[string]interface{}{
 			"AvgBkDuration":  h.counters[k].BkDurationMs.Microseconds() / int64(c),
 			"AvgDuration":    h.counters[k].Duration.Microseconds() / int64(c),
