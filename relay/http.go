@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"golang.org/x/time/rate"
 
-	//"net"
+	"net"
 	"net/http"
+	"golang.org/x/net/netutil"
 
 	"strings"
 	"time"
@@ -59,6 +60,8 @@ type HTTP struct {
 	ticker   *time.Ticker
 	mu       sync.Mutex
 	counters map[string]*aggregation
+
+	LimitListener int
 }
 
 type relayHandlerFunc func(h *HTTP, w http.ResponseWriter, r *http.Request)
@@ -69,16 +72,16 @@ var (
 		"/ping":        (*HTTP).handlePing,
 		"/status":      (*HTTP).handleStatus,
 		"/admin":       (*HTTP).handleAdmin,
-		"/admin/flush": (*HTTP).handleFlush,
+		"/flush":        (*HTTP).handleFlush,
 		"/health":      (*HTTP).handleHealth,
 		"/counters":    (*HTTP).handleCounters,
 	}
 
 	middlewares = []relayMiddleware{
+		(*HTTP).rateMiddleware,
 		(*HTTP).bodyMiddleWare,
 		(*HTTP).queryMiddleWare,
 		(*HTTP).logMiddleWare,
-		(*HTTP).rateMiddleware,
 	}
 )
 
@@ -143,6 +146,13 @@ func NewHTTP(cfg *config.HTTPConfig) (*HTTP, error) {
 			h.rateLimiter = rate.NewLimiter(rate.Limit(cfg.RateLimit), 1)
 		}
 	}
+
+	h.LimitListener = 2000
+	if cfg.LimitListener > 0 {
+		h.LimitListener = cfg.LimitListener
+	}
+	h.log.Info().Msgf("Will limit the tcp listener to %+v connections", h.LimitListener)
+
 	return h, nil
 }
 
@@ -174,13 +184,19 @@ func (h *HTTP) Name() string {
 
 // Run actually launch the HTTP endpoint
 func (h *HTTP) Run() error {
+	var err error
+	l, err := net.Listen("tcp", h.cfg.BindAddr)
+	if err != nil {
+		h.log.Info().Msgf("Could not create a TCP Listener: %v", err)
+	}
+	defer l.Close()
+	l = netutil.LimitListener(l, h.LimitListener)
 
 	h.s = &http.Server{Addr: h.cfg.BindAddr, Handler: h}
-	var err error
 	if h.cfg.TLSCert != "" {
-		err = h.s.ListenAndServeTLS(h.cfg.TLSCert, h.cfg.TLSKey)
+		err = h.s.ServeTLS(l, h.cfg.TLSCert, h.cfg.TLSKey)
 	} else {
-		err = h.s.ListenAndServe()
+		err = h.s.Serve(l)
 	}
 	if err == nil || err == http.ErrServerClosed {
 		start := time.Now()

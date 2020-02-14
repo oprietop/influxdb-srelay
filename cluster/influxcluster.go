@@ -156,7 +156,7 @@ func (c *Cluster) handleWriteBase(w http.ResponseWriter, r *http.Request) bool {
 	//CHECK RATE
 
 	if c.rateLimiter != nil && !c.rateLimiter.Allow() {
-		c.log.Debug().Msgf("Rate Limited => Too Many Request (Limit %+v)(Burst %d) ", c.rateLimiter.Limit(), c.rateLimiter.Burst)
+		c.log.Warn().Msgf("Rate Limited => Too Many Request (Limit %+v)(Burst %d) ", c.rateLimiter.Limit(), c.rateLimiter.Burst)
 		relayctx.JsonResponse(w, r, http.StatusTooManyRequests, http.StatusText(http.StatusTooManyRequests))
 		return false
 	}

@@ -125,7 +125,7 @@ func (e *HTTPEndPoint) ProcessInput(w http.ResponseWriter, r *http.Request) bool
 		return false
 	}
 
-	e.log.Info().Msgf("Init Processing Endpoint %s", uri)
+	e.log.Debug().Msgf("Init Processing Endpoint %s", uri)
 	params := e.splitParams(r)
 	e.process(w, r, params)
 

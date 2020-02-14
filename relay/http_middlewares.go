@@ -132,7 +132,11 @@ func (h *HTTP) rateMiddleware(next relayHandlerFunc) relayHandlerFunc {
 	return relayHandlerFunc(func(h *HTTP, w http.ResponseWriter, r *http.Request) {
 		h.log.Debug().Msg("----------------------INIT rateMiddleware-----------------------")
 		if h.rateLimiter != nil && !h.rateLimiter.Allow() {
-			h.log.Debug().Msgf("Rate Limited => Too Many Request (Limit %+v)(Burst %d) ", h.rateLimiter.Limit(), h.rateLimiter.Burst)
+			if r.URL.String() == "/health" {
+				h.log.Warn().Msgf("Rate Limited skip for a health request (Limit %+v)(Burst %d) ", h.rateLimiter.Limit(), h.rateLimiter.Burst)
+				return
+			}
+			h.log.Warn().Msgf("Rate Limited => Too Many Request (Limit %+v)(Burst %d) ", h.rateLimiter.Limit(), h.rateLimiter.Burst)
 			relayctx.JsonResponse(w, r, http.StatusTooManyRequests, http.StatusText(http.StatusTooManyRequests))
 			return
 		}

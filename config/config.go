@@ -50,6 +50,7 @@ type InfluxDBBackend struct {
 	// Skip TLS verification in order to use self signed certificate
 	// WARNING: It's insecure, use it only for developing and don't use in production
 	SkipTLSVerification bool `toml:"skip-tls-verification"`
+
 }
 
 func (ib *InfluxDBBackend) ValidateCfg(cfg *Config) error {
@@ -208,6 +209,7 @@ type Rule struct {
 	Key            RuleKey    `toml:"key"` //	"regexp"
 	KeyAux         string     `toml:"key_aux"`
 	Match          string     `toml:"match"`
+	Split          string     `toml:"split"`
 	Value          string     `toml:"value"`
 	ValueOnUnMatch string     `toml:"value_on_unmatch"`
 	ToCluster      string     `toml:"to_cluster"`
@@ -364,6 +366,8 @@ type HTTPConfig struct {
 	MetricsUser     string `toml:"metrics-user"`
 	MetricsPass     string `toml:"metrics-pass"`
 	MetricsInterval int    `toml:"metrics-interval"`
+	// Limit the listener cocurrent connections
+	LimitListener int `toml:"limit-listener"`
 }
 
 func (h *HTTPConfig) ValidateCfg(cfg *Config) error {

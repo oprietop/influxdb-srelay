@@ -16,6 +16,8 @@ import (
 	"github.com/toni-moreno/influxdb-srelay/config"
 	"github.com/toni-moreno/influxdb-srelay/relayservice"
 	"github.com/toni-moreno/influxdb-srelay/utils"
+	"net/http"
+	_ "net/http/pprof"
 )
 
 const (
@@ -89,6 +91,10 @@ func ReloadRelay() {
 }
 
 func main() {
+	// pprof entrypoint
+	go func() {
+		http.ListenAndServe("0.0.0.0:8080", nil)
+	}()
 
 	var err error
 
@@ -126,6 +132,7 @@ func main() {
 
 			select {
 			case sig := <-c:
+				//p.Stop()
 				SigMutex.RLock()
 				recsignal = sig
 				SigMutex.RUnlock()

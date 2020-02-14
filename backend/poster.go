@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"net"
+	"runtime"
 )
 
 type poster interface {
@@ -25,10 +27,25 @@ type simplePoster struct {
 func newSimplePoster(serverid string, location string, clusterid string, timeout time.Duration, skipTLSVerification bool) *simplePoster {
 	// Configure custom transport for http.Client
 	// Used for support skip-tls-verification option
+//	transport := &http.Transport{
+//		TLSClientConfig: &tls.Config{
+//			InsecureSkipVerify: skipTLSVerification,
+//		},
+//	}
+
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: skipTLSVerification,
 		},
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConnsPerHost:   runtime.NumGoroutine(),
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
 
 	return &simplePoster{
