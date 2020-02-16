@@ -61,6 +61,7 @@ type HTTP struct {
 	mu       sync.Mutex
 	counters map[string]*aggregation
 
+	sema chan struct {}
 	LimitListener int
 }
 
@@ -105,6 +106,7 @@ func NewHTTP(cfg *config.HTTPConfig) (*HTTP, error) {
 		h.ticker = time.NewTicker(time.Duration(h.cfg.MetricsInterval) * time.Second)
 		go func() {
 			for now := range h.ticker.C {
+	                        h.log.Info().Msgf("Currently with %v concurrent connections", len(h.sema))
 				h.log.Info().Msgf("Tick at %v. Sending counters to influxdb.", now)
 				h.sendCounters()
 			}
@@ -138,6 +140,10 @@ func NewHTTP(cfg *config.HTTPConfig) (*HTTP, error) {
 		h.log.Info().Msgf("ENDPOINT [%d] | %+v", i, b)
 	}
 
+        maxClients := 10
+	h.sema = make(chan struct{}, maxClients)
+	h.log.Info().Msgf("Will limit the concurrency to %+v connections", maxClients)
+
 	// If a RateLimit is specified, create a new limiter
 	if cfg.RateLimit != 0 {
 		if cfg.BurstLimit != 0 {
@@ -147,7 +153,7 @@ func NewHTTP(cfg *config.HTTPConfig) (*HTTP, error) {
 		}
 	}
 
-	h.LimitListener = 2000
+	h.LimitListener = 20000
 	if cfg.LimitListener > 0 {
 		h.LimitListener = cfg.LimitListener
 	}
@@ -249,8 +255,13 @@ func (h *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	relayctx.AppendCxtTracePath(R, "http", h.cfg.Name)
 
-	h.log.Debug().Msgf("IN REQUEST:%+v", R)
+	h.log.Debug().Msgf("IN REQUEST:%+v (%v)", R, len(h.sema))
 	//first we will try to process user EndPoints
+	h.sema <- struct{}{}
+	defer func() {
+		<-h.sema
+	        h.log.Debug().Msgf("OUT REQUEST:%+v (%v)", R, len(h.sema))
+	}()
 	allMiddlewares(h, ProcessEndpoint)(h, w, R)
 	//if not served we will process the amdin EndPoints
 	served := relayctx.GetServed(R)
@@ -269,6 +280,7 @@ func (h *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.log.Debug().Msgf("handle r.URL.Path for CLUSTERID %s", clusterid)
 				relayctx.SetServedOK(R)
 				relayctx.SetCtxParam(R, "clusterid", clusterid)
+	                        h.log.Info().Msgf("In %v", len(h.sema))
 				allMiddlewares(h, fun)(h, w, R)
 				return
 			}
