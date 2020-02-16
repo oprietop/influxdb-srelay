@@ -255,50 +255,38 @@ func (rr *RouteRule) ActionRouteDBFromData(w http.ResponseWriter, r *http.Reques
 			}
 		}
 	case "tag", "tagvalue":
-		tagkey := rr.cfg.KeyAux
-		// need for rr.cfg.Key_aux
+		tagkey := []byte(rr.cfg.KeyAux)
+		// Traverse Points
 		for _, p := range params.Points {
-			//rr.log.Debug().Msgf("POINT :%+v", p)
-			var tagvalue []byte
-			for _, t := range p.Tags() {
-				//				rr.log.Debug().Msgf("Found Tag %d [%s] tagkey[%s] with value [%s]  | %s", k, t.Key, tagkey, t.Value, t.String())
-				if string(t.Key) == tagkey {
-					tagvalue = t.Value
-					break
-				}
-			}
+			rr.log.Debug().Msgf("POINT: %+v", p)
+			// Check it the point has tag key equal to tagkey
+			if p.HasTag(tagkey) {
+				// get the tag value
+				tagvalue := p.Tags().Get(tagkey)
+				rr.log.Debug().Msgf("Found key_aux tagkey[%s] with tagvalue[%s]", tagkey, tagvalue)
 
-			if len(tagvalue) > 0 && rr.filter.Match(tagvalue) {
-				//rr.log.Debug().Msgf("Found Tag key [%s] with value [%s]", tagkey, tagvalue)
-				dbName := rr.filter.ReplaceAllString(string(tagvalue), rr.cfg.Value)
-				rr.log.Debug().Msgf("Selected DB name: %s | Tag key: %s |Tag Value %s", dbName, tagkey, tagvalue)
-				//rr.log.Debug().Msgf("POINT :%+v", p)
-				if newpoints, ok := dbs[dbName]; ok {
-					newpoints = append(newpoints, p)
-					dbs[dbName] = newpoints
-				} else {
-					dbs[dbName] = models.Points{p}
+				var dbName string
+				if len(tagvalue) > 0 && rr.filter.Match(tagvalue) { // matches our regex
+					dbName = rr.filter.ReplaceAllString(string(tagvalue), rr.cfg.Value)
+					rr.log.Debug().Msgf("Selected DB name: %s | Tag key: %s | Tag Value %s | Cfg Value: [%s]", dbName, tagkey, tagvalue, rr.cfg.Value)
+				} else if len(rr.cfg.ValueOnUnMatch) > 0 { // got a value to use on unmatch
+					dbName = rr.cfg.ValueOnUnMatch
+					rr.log.Debug().Msgf("VALUE UNMATCH TO :%+s", rr.cfg.ValueOnUnMatch)
+				} else { // no unmatch too
+					rr.log.Debug().Msgf("Point does not match TAGVALUE %s (Measurement : %s) TAGS %+v", tagvalue, p.Name(), p.Tags())
 				}
 
-			} else {
-				//not match or not found the tag
-				//rr.log.Debug().Msgf("POINT NOT MATCH :%+v", p)
-				if len(rr.cfg.ValueOnUnMatch) > 0 {
-					//rr.log.Debug().Msgf("VALUE UNMATCH TO :%+s", rr.cfg.ValueOnUnMatch)
-					dbName := rr.cfg.ValueOnUnMatch
-					if newpoints, ok := dbs[dbName]; ok {
-						newpoints = append(newpoints, p)
-						dbs[dbName] = newpoints
+				// If we got a dbName...
+				if dbName != "" {
+					if _, ok := dbs[dbName]; ok {
+						dbs[dbName] = append(dbs[dbName], p)
 					} else {
-						dbs[dbName] = models.Points{p}
+						dbs[dbName] = models.Points{p} // inimialize the value if the key is missing
 					}
-				} /*else {
-					rr.log.Debug().Msgf("NOT UNMATCH RULE : %+v", rr.cfg)
-				}*/
-				//not match
-				rr.log.Debug().Msgf("Point does not match TAGVALUE %s (Measurement : %s) TAGS %+v", tagvalue, p.Name(), p.Tags())
+				}
 			}
 		}
+		//rr.log.Debug().Msgf("DBS %+v", dbs)
 
 	case "field", "fieldvalue":
 		rr.log.Warn().Msgf("Field Value Based Route Not Supported Yet on rule %s", rr.cfg.Name)

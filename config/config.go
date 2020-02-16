@@ -50,7 +50,6 @@ type InfluxDBBackend struct {
 	// Skip TLS verification in order to use self signed certificate
 	// WARNING: It's insecure, use it only for developing and don't use in production
 	SkipTLSVerification bool `toml:"skip-tls-verification"`
-
 }
 
 func (ib *InfluxDBBackend) ValidateCfg(cfg *Config) error {
@@ -368,6 +367,8 @@ type HTTPConfig struct {
 	MetricsInterval int    `toml:"metrics-interval"`
 	// Limit the listener cocurrent connections
 	LimitListener int `toml:"limit-listener"`
+	// Limit the non admin endpoint connections the https server will handle
+	LimitConcurrency int `toml:"limit-concurrency"`
 }
 
 func (h *HTTPConfig) ValidateCfg(cfg *Config) error {

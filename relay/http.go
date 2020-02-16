@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"golang.org/x/time/rate"
 
+	"golang.org/x/net/netutil"
 	"net"
 	"net/http"
-	"golang.org/x/net/netutil"
 
 	"strings"
 	"time"
@@ -61,8 +61,9 @@ type HTTP struct {
 	mu       sync.Mutex
 	counters map[string]*aggregation
 
-	sema chan struct {}
-	LimitListener int
+	sema             chan struct{}
+	LimitConcurrency int
+	LimitListener    int
 }
 
 type relayHandlerFunc func(h *HTTP, w http.ResponseWriter, r *http.Request)
@@ -70,12 +71,12 @@ type relayMiddleware func(h *HTTP, handlerFunc relayHandlerFunc) relayHandlerFun
 
 var (
 	handlers = map[string]relayHandlerFunc{
-		"/ping":        (*HTTP).handlePing,
-		"/status":      (*HTTP).handleStatus,
-		"/admin":       (*HTTP).handleAdmin,
-		"/flush":        (*HTTP).handleFlush,
-		"/health":      (*HTTP).handleHealth,
-		"/counters":    (*HTTP).handleCounters,
+		"/ping":     (*HTTP).handlePing,
+		"/status":   (*HTTP).handleStatus,
+		"/admin":    (*HTTP).handleAdmin,
+		"/flush":    (*HTTP).handleFlush,
+		"/health":   (*HTTP).handleHealth,
+		"/counters": (*HTTP).handleCounters,
 	}
 
 	middlewares = []relayMiddleware{
@@ -106,7 +107,8 @@ func NewHTTP(cfg *config.HTTPConfig) (*HTTP, error) {
 		h.ticker = time.NewTicker(time.Duration(h.cfg.MetricsInterval) * time.Second)
 		go func() {
 			for now := range h.ticker.C {
-	                        h.log.Info().Msgf("Currently with %v concurrent connections", len(h.sema))
+				h.log.Info().Msgf("Currently with %v concurrent connections", len(h.sema))
+				h.log.Info().Msgf("Ratelimiter state: %+v", h.rateLimiter)
 				h.log.Info().Msgf("Tick at %v. Sending counters to influxdb.", now)
 				h.sendCounters()
 			}
@@ -140,9 +142,20 @@ func NewHTTP(cfg *config.HTTPConfig) (*HTTP, error) {
 		h.log.Info().Msgf("ENDPOINT [%d] | %+v", i, b)
 	}
 
-        maxClients := 10
-	h.sema = make(chan struct{}, maxClients)
-	h.log.Info().Msgf("Will limit the concurrency to %+v connections", maxClients)
+	// Hard connection limint for the tcp listener
+	h.LimitListener = 5000
+	if cfg.LimitListener > 0 {
+		h.LimitListener = cfg.LimitListener
+	}
+	h.log.Info().Msgf("Will limit the tcp listener to %+v connections", h.LimitListener)
+
+	// Number of non admin endpoint connections the https server will handle
+	h.LimitConcurrency = 1000
+	if cfg.LimitConcurrency > 0 {
+		h.LimitConcurrency = cfg.LimitConcurrency
+	}
+	h.sema = make(chan struct{}, h.LimitConcurrency)
+	h.log.Info().Msgf("Will limit the concurrency to %+v connections", h.LimitConcurrency)
 
 	// If a RateLimit is specified, create a new limiter
 	if cfg.RateLimit != 0 {
@@ -151,13 +164,8 @@ func NewHTTP(cfg *config.HTTPConfig) (*HTTP, error) {
 		} else {
 			h.rateLimiter = rate.NewLimiter(rate.Limit(cfg.RateLimit), 1)
 		}
+		h.log.Info().Msgf("Will limit the connection rate to %v connections per second", h.rateLimiter.Limit())
 	}
-
-	h.LimitListener = 20000
-	if cfg.LimitListener > 0 {
-		h.LimitListener = cfg.LimitListener
-	}
-	h.log.Info().Msgf("Will limit the tcp listener to %+v connections", h.LimitListener)
 
 	return h, nil
 }
@@ -198,7 +206,14 @@ func (h *HTTP) Run() error {
 	defer l.Close()
 	l = netutil.LimitListener(l, h.LimitListener)
 
-	h.s = &http.Server{Addr: h.cfg.BindAddr, Handler: h}
+	h.s = &http.Server{
+		Addr:         h.cfg.BindAddr,
+		Handler:      h,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
+
 	if h.cfg.TLSCert != "" {
 		err = h.s.ServeTLS(l, h.cfg.TLSCert, h.cfg.TLSKey)
 	} else {
@@ -250,48 +265,44 @@ var ProcessEndpoint relayHandlerFunc = (*HTTP).processEndpoint
 // ServeHTTP is the function that handles the different route
 // The response is a JSON object describing the state of the operation
 func (h *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
 	R := relayctx.InitRelayContext(r)
-
 	relayctx.AppendCxtTracePath(R, "http", h.cfg.Name)
-
 	h.log.Debug().Msgf("IN REQUEST:%+v (%v)", R, len(h.sema))
-	//first we will try to process user EndPoints
-	h.sema <- struct{}{}
-	defer func() {
-		<-h.sema
-	        h.log.Debug().Msgf("OUT REQUEST:%+v (%v)", R, len(h.sema))
-	}()
-	allMiddlewares(h, ProcessEndpoint)(h, w, R)
-	//if not served we will process the amdin EndPoints
-	served := relayctx.GetServed(R)
-	if !served {
-		relayctx.AppendCxtTracePath(R, "endpoint", "none")
-		h.log.Debug().Msg("Query not served by user endpoints, reviewing relay handlers ")
-		for url, fun := range handlers {
-			if strings.HasPrefix(r.URL.Path, url) {
-				var clusterid string
-				if url == R.URL.Path {
-					clusterid = ""
-				} else {
-					clusterid = strings.TrimPrefix(R.URL.Path, url+"/")
-				}
 
-				h.log.Debug().Msgf("handle r.URL.Path for CLUSTERID %s", clusterid)
-				relayctx.SetServedOK(R)
-				relayctx.SetCtxParam(R, "clusterid", clusterid)
-	                        h.log.Info().Msgf("In %v", len(h.sema))
-				allMiddlewares(h, fun)(h, w, R)
-				return
+	//first we will try to process admin EndPoints first, they won't count for the concurrency limit
+	for url, fun := range handlers {
+		if strings.HasPrefix(r.URL.Path, url) {
+			relayctx.AppendCxtTracePath(R, "endpoint", "none")
+			var clusterid string
+			if url == R.URL.Path {
+				clusterid = ""
+			} else {
+				clusterid = strings.TrimPrefix(R.URL.Path, url+"/")
 			}
 
+			h.log.Debug().Msgf("handle r.URL.Path for CLUSTERID %s", clusterid)
+			relayctx.SetServedOK(R)
+			relayctx.SetCtxParam(R, "clusterid", clusterid)
+			allMiddlewares(h, fun)(h, w, R)
+			return
 		}
+	}
+
+	//if not served we will process the user EndPoints
+	served := relayctx.GetServed(R)
+	if !served {
+		// Limit concurrency
+		h.sema <- struct{}{}
+		defer func() {
+			<-h.sema
+			h.log.Debug().Msgf("OUT REQUEST:%+v (%v)", R, len(h.sema))
+		}()
+		allMiddlewares(h, ProcessEndpoint)(h, w, R)
+		h.log.Debug().Msg("Query not served by relay handlers, reviewing user endpoints ")
 		served2 := relayctx.GetServed(R)
 		if !served2 {
 			//NOT SERVED YET
 			allMiddlewares(h, ProcessUnknown)(h, w, R)
 		}
-
 	}
-
 }
