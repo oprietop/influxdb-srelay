@@ -445,7 +445,7 @@ func InfluxEncode(points models.Points) (*bytes.Buffer, error) {
 	var err error
 	for _, p := range points {
 		// Those two functions never return any errors, let's just ignore the return value
-		_, err = output.WriteString(p.String())
+		_, err = output.Write(p.AppendString(nil))
 		if err != nil {
 			return &output, err
 		}
@@ -454,6 +454,7 @@ func InfluxEncode(points models.Points) (*bytes.Buffer, error) {
 			return &output, err
 		}
 	}
+
 	return &output, nil
 }
 
