@@ -373,6 +373,7 @@ func (rt *HTTPRoute) DecodePrometheus(w http.ResponseWriter, r *http.Request) (i
 	var bodyBuf bytes.Buffer
 	_, err := bodyBuf.ReadFrom(r.Body)
 	if err != nil {
+		rt.log.Error().Msgf("Error reading the Body from the prometreus stream : %s", err)
 		return 0, nil, err
 	}
 
