@@ -209,9 +209,9 @@ func (h *HTTP) Run() error {
 	h.s = &http.Server{
 		Addr:         h.cfg.BindAddr,
 		Handler:      h,
-		ReadTimeout:  5 * time.Second,
+		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  30 * time.Second,
+		IdleTimeout:  10 * time.Second,
 	}
 
 	if h.cfg.TLSCert != "" {
