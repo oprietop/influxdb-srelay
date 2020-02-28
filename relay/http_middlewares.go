@@ -41,7 +41,6 @@ func allMiddlewares(h *HTTP, handlerFunc relayHandlerFunc) relayHandlerFunc {
 func (h *HTTP) bodyMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 	return relayHandlerFunc(func(h *HTTP, w http.ResponseWriter, r *http.Request) {
 		h.log.Debug().Msg("----------------------INIT bodyMiddleWare------------------------")
-		var body = r.Body
 		if r.Header.Get("Content-Encoding") == "gzip" {
 			b, err := gzip.NewReader(r.Body)
 			if err != nil {
@@ -49,10 +48,9 @@ func (h *HTTP) bodyMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 				return
 			}
 			defer b.Close()
-			body = b
+			r.Body = b
 		}
 
-		r.Body = body
 		next(h, w, r)
 		h.log.Debug().Msg("----------------------END bodyMiddleWare------------------------")
 	})
