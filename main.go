@@ -90,14 +90,11 @@ func ReloadRelay() {
 
 }
 
-func init() {
+func main() {
 	// pprof entrypoint
 	go func() {
 		http.ListenAndServe("0.0.0.0:8080", nil)
 	}()
-}
-
-func main() {
 
 	var err error
 
