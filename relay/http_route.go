@@ -413,7 +413,7 @@ func (rt *HTTPRoute) DecodeInflux(w http.ResponseWriter, r *http.Request) (int, 
 	queryParams := r.URL.Query()
 	precision := queryParams.Get("precision")
 	//not sure tu use models.ParsePointsWithPrecision ( or perhaps betther models.ParsePoints)
-	points, err := models.ParsePointsWithPrecision(nil, bodyBuf.Bytes(), time.Now(), precision)
+	points, err := models.ParsePointsWithPrecision(bodyBuf.Bytes(), time.Now(), precision)
 	if err != nil {
 		rt.log.Error().Msgf("parse points error: %s", err)
 		return 0, nil, errors.New("Unable to parse points: " + err.Error())

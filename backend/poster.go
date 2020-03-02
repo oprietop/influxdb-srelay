@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 	"net"
+	"runtime"
 )
 
 type poster interface {
@@ -37,12 +38,14 @@ func newSimplePoster(serverid string, location string, clusterid string, timeout
 			InsecureSkipVerify: skipTLSVerification,
 		},
 		DialContext: (&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 10 * time.Second,
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
 		}).DialContext,
-		MaxIdleConnsPerHost:   100,
-		ExpectContinueTimeout: 4 * time.Second,
-		ResponseHeaderTimeout: 3 * time.Second,
+		MaxIdleConnsPerHost:   runtime.NumGoroutine(),
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
 
 	return &simplePoster{
